@@ -31,7 +31,9 @@ def summarize_article(url):
             raise RuntimeError(f"Failed to fetch URL: {url} with status code {response.status_code}")
         
         # Assuming the content is text-based (you can adjust this if needed)
-        soup = BeautifulSoup(response.content, 'lxml')
+        #soup = BeautifulSoup(response.content, 'lxml')
+        soup = BeautifulSoup(response.content, 'html.parser')
+
 
         paragraphs = soup.find_all('p')
         if not paragraphs:
@@ -98,7 +100,7 @@ def summarize():
         Thank you."""
         
         prompt = ChatPromptTemplate.from_template(template)
-        model = ChatOllama(model="llama3.1:latest", temperature=0)
+        model = ChatOllama(model="llama3.1:8b", temperature=0)
         # Use RunnableLambda to integrate your Python function
         url_to_text = RunnableLambda(lambda url: {"article_text": extract_pmc_article_xml(url)})
         # Create the chain to process the article and generate the summary

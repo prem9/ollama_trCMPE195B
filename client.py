@@ -1,6 +1,7 @@
 import requests
 # The URL to the API
 api_url = "http://localhost:5000/summarize"
+#api_url = "http://192.168.1.54:5000/summarize"
 
 # Data to send in the POST request (URL of the document to summarize)
 data = {
