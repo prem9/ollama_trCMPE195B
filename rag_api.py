@@ -12,6 +12,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain.schema.runnable import RunnableLambda
 from langchain_chroma import Chroma
+from langchain_core.runnables import RunnableMap 
+
+def format_docs(docs):
+    return "\n\n".join([d.page_content for d in docs])
 
 def summarize_article(url):
     # Add headers to mimic a browser request
@@ -31,9 +35,7 @@ def summarize_article(url):
             raise RuntimeError(f"Failed to fetch URL: {url} with status code {response.status_code}")
         
         # Assuming the content is text-based (you can adjust this if needed)
-        #soup = BeautifulSoup(response.content, 'lxml')
-        soup = BeautifulSoup(response.content, 'html.parser')
-
+        soup = BeautifulSoup(response.content, 'lxml')
 
         paragraphs = soup.find_all('p')
         if not paragraphs:
@@ -92,21 +94,47 @@ def summarize():
         query = "Summarize the article."
         docs = db.similarity_search(query)
 
-        template = """Role and Context:
-        You are an AI assistant with combined expertise equivalent to a Ph.D. in medical sciences and an MD specializing in oncology. Your goal is to assist cancer patients by summarizing complex articles in clear, concise language.
-        
+      # ✅ Prompt Template: Now includes both article and retrieved context
+        template = """Role and Context
+        You are an AI assistant with combined expertise equivalent to a Ph.D. in medical sciences and an MD specializing in oncology. Your primary goal is to assist cancer patients by summarizing complex medical and scientific articles from sources like PubMed or other online medical journals into clear, concise, and easy-to-understand language. Patients will provide you with URLs to articles or directly paste article text for summarization.
+
+        Summarization Instructions
+        When summarizing:
+        - Convert complex medical jargon into plain language suitable for laypersons.
+        - Clearly outline key findings, conclusions, and implications relevant to cancer patients.
+        - Ensure the summary is accurate, concise, and informative.
+
+        Ethical and Professional Considerations
+        - Clearly indicate where information provided is general guidance versus content directly extracted from the specific article.
+        - Provide balanced insights to support informed decision-making by patients but explicitly advise consultation with healthcare professionals before acting upon recommendations.
+
+        Overall Goal
+        Empower cancer patients by translating scientific literature into actionable knowledge, supporting informed decisions about treatment options, supplementary therapies, and overall health management.
+
+        === Context ===
+        {context}
+
+        === Article ===
         {article_text}
 
         Thank you."""
         
         prompt = ChatPromptTemplate.from_template(template)
         model = ChatOllama(model="llama3.1:8b", temperature=0)
+        retriever = db.as_retriever()
+        # ✅ Dynamic retriever for general cancer guidance — later this can be based on query/article content
+        context_fetcher = RunnableLambda(lambda _: {"context": format_docs(retriever.invoke("cancer treatment"))})
         # Use RunnableLambda to integrate your Python function
         url_to_text = RunnableLambda(lambda url: {"article_text": extract_pmc_article_xml(url)})
+        # ✅ Combine both parts into a single dictionary
+        input_mapper = RunnableMap({
+            "article_text": url_to_text,
+            "context": context_fetcher
+        })
+        
         # Create the chain to process the article and generate the summary
         chain = (
-            RunnablePassthrough() 
-            | url_to_text
+            input_mapper
             | prompt
             | model
             | StrOutputParser()
@@ -119,6 +147,10 @@ def summarize():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 if __name__ == '__main__':
     app.run(debug=True)
-
+    #import socket
+    #ip = socket.gethostbyname(socket.gethostname())
+    #print(f"Visit: http://{ip}:5000/")
+    #app.run(host='0.0.0.0', port=5000)
